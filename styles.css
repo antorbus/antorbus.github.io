@@ -9,14 +9,14 @@ body {
 }
 
 header {
-    background-color: #007acc;
-    color: white;
+    background-color: #ede8e0;
+    color: #1e1e1e;
     padding: 1rem;
     text-align: center;
 }
 
 nav a {
-    color: white;
+    color: #1e1e1e;
     text-decoration: none;
     margin: 0 10px;
     font-weight: bold;
@@ -37,4 +37,12 @@ footer {
     margin-top: 2rem;
     font-size: 0.9rem;
     color: #6a6a6a;
+}
+
+.profile-pic {
+    width: 150px;
+    height: auto;
+    border-radius: 50%;
+    display: block;
+    margin: 0 auto 1rem;
 }
