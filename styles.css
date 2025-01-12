@@ -1,4 +1,3 @@
-/* General Styles */
 body {
     font-family: monospace, sans-serif;
     background-color: #1e1e1e;
@@ -47,12 +46,27 @@ footer {
     margin: 0 auto 1rem;
 }
 
-.highlight {
-    background-color: #007acc;
+.email-link {
     color: white;
-    padding: 0.2rem 0.4rem;
-    border-radius: 5px;
+    text-decoration: none;
+    font-weight: bold;
 }
-.highlight:hover {
-    background-color: #005f99;
+
+.email-link:hover {
+    text-decoration: underline;
+}
+
+.highlight {
+    color: white;
+}
+
+.simple-link {
+    color: white;
+    text-decoration: none;
+    font-size: 16px;
+    font-weight: bold;
+}
+
+.simple-link:hover {
+    text-decoration: underline;
 }
