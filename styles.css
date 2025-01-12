@@ -46,3 +46,13 @@ footer {
     display: block;
     margin: 0 auto 1rem;
 }
+
+.highlight {
+    background-color: #007acc;
+    color: white;
+    padding: 0.2rem 0.4rem;
+    border-radius: 5px;
+}
+.highlight:hover {
+    background-color: #005f99;
+}
