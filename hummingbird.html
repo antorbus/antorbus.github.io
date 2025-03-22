@@ -21,42 +21,180 @@
                     HummingBird: A Fast IO Aware Attention Kernel For Small
                     Sequences
                 </h2>
+                <p>12/30/24</p>
                 <p>
-                    Lorem ipsum dolor sit amet, consectetur adipiscing elit.
-                    Vestibulum vel dignissim velit, vel pretium purus. Nullam eu
-                    risus nisi. Curabitur efficitur mauris id orci vulputate, at
-                    sagittis lectus scelerisque.
+                    tl;dr I made an attention kernel optimized for a small
+                    number of tokens that runs almost thrice as fast (wall clock
+                    time) as flash attention on a 4090
                 </p>
             </section>
             <section>
-                <h3>Features</h3>
+                <h3>Results</h3>
                 <ul>
                     <li>
-                        Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+                        There are two kernels which I have made: one for
+                        sequences of <= 32 tokens with a head dimension of 64,
+                        and one for <= 48 tokens with a head dimenision of 32.
+                        Both kernels are made for float16 precision.
                     </li>
-                    <li>Vestibulum vel dignissim velit, vel pretium purus.</li>
+                    <br />
                     <li>
-                        Nullam eu risus nisi. Curabitur efficitur mauris id
-                        orci.
+                        The 32 token kernel runs in 790μs for a batch size of
+                        1000 and a model dimension of 5120 = 64 * 80 (head_dim *
+                        num_heads). Flash attention takes 2.26ms. This is almost
+                        a 3x speed-up on wall clock (CUDA) time.
+                    </li>
+                    <br />
+                    <li>
+                        The 48 token kernel runs in 710μs for the same batch
+                        size and model dimension. Flash attention takes 1.44ms.
+                        This is slightly over a 2x speed up.
+                    </li>
+                    <br />
+                    <li>
+                        These speed ups, both in model dimension and batch size,
+                        scale up to any size (HBM permitting) for those number
+                        of tokens and head dimension, NOT for other sizes.
                     </li>
                 </ul>
             </section>
             <section>
+                <h3>First iterations</h3>
+                <p>
+                    Before beginning sophomore fall semester, I had spent the
+                    majority of August evenings thinking about how to reduce the
+                    time complexity of the attention mechanism. I had started to
+                    think about methods of computing attention through cascading
+                    layers (basically a two-step sliding window attention).
+                </p>
+                <p>
+                    Results looked promising. My models were training and the
+                    losses were going down. However, I was gluing my
+                    modifications on top of torch's scaled_dot_product_attention
+                    so I wasn't getting the desired performance increase.
+                    Therefore, I decided to take a quick (2 month) detour to
+                    learn CUDA.
+                </p>
+                <p>
+                    I decided that I my first kernel would implement variable
+                    sliding window attention. I spent a weekend on that, and
+                    once it was done, I benchmarked it and, to my surpise, it
+                    was faster than I expected! I made the sliding window as big
+                    as the number of tokens (equivalent to vanilla attention),
+                    and astonishingly it was also faster than flash attention.
+                </p>
+                <p>
+                    Of course, this was a fallacy. I was benchmarking the kernel
+                    launch time (CPU + CUDA time) instead of pure CUDA time. To
+                    the surpise of no one, my triple for loop matrix
+                    multiplication was actually 100x slower...
+                </p>
+                <p>
+                    But I persisted! I had already told my advisor that I was
+                    pivoting my research to making CUDA kernels so I had to
+                    deliver. Two hectic months of classes passed and finally I
+                    had real results. Below is an explanation of how it works.
+                </p>
                 <h3>Technical Details</h3>
                 <p>
-                    Pellentesque habitant morbi tristique senectus et netus et
-                    malesuada fames ac turpis egestas. Aenean ac nisl sed metus
-                    vulputate vehicula quis at eros. Sed ultrices mi vel nisi
-                    eleifend, nec venenatis velit posuere.
+                    First of all, how to we make programs run faster? One way is
+                    by recuding the memory bottleneck. This is done in two ways:
+                    through kernel fusion and by keeping as many of the
+                    intermediate computations in shared memory. Therefore, the
+                    most important consideration of my implementation was the
+                    architecture I was dealing with, as this would determine the
+                    maximum size of the matrices that I could keep in shared
+                    memory.
                 </p>
+                <p>
+                    4090s have 128 KB of shared memory per streaming
+                    multiprocessor (sort of like CPU cores in the sense that
+                    they have hardware threads and there are many of them). Some
+                    of this memory is usually used as an L1 cache but we can
+                    tell the GPU that we wish to use all of it using
+                    <code>cudaFuncAttributePreferredSharedMemoryCarveout</code>.
+                    Now we have the full 128 KB per SM to ourselves, which we
+                    run 4 blocks on, leaving us with 32 KB per block.
+                </p>
+                <p>
+                    Below are the results for the time taken on 32 tokens with a
+                    head dimension of 64 on a 4090 using
+                    <code>torch.profiler.ProfilerActivity</code>. The results
+                    for 48 tokens and a head dimension of 48 follow a similar
+                    pattern.
+                </p>
+                <table>
+                    <tr>
+                        <td>batch_size</td>
+                        <td>num_heads</td>
+                        <td>hummingbird</td>
+                        <td>torch</td>
+                        <td>flash_attn</td>
+                    </tr>
+                    <tr>
+                        <td>1</td>
+                        <td>1</td>
+                        <td>2.720us</td>
+                        <td>7.169us</td>
+                        <td>6.624us</td>
+                    </tr>
+                    <tr>
+                        <td>1</td>
+                        <td>32</td>
+                        <td>2.688us</td>
+                        <td>7.072us</td>
+                        <td>6.784us</td>
+                    </tr>
+                    <tr>
+                        <td>1</td>
+                        <td>128</td>
+                        <td>3.168us</td>
+                        <td>7.744us</td>
+                        <td>7.232us</td>
+                    </tr>
+                    <tr>
+                        <td>10</td>
+                        <td>128</td>
+                        <td>14.624us</td>
+                        <td>43.040us</td>
+                        <td>38.720us</td>
+                    </tr>
+                    <tr>
+                        <td>100</td>
+                        <td>128</td>
+                        <td>130.271us</td>
+                        <td>408.545us</td>
+                        <td>377.185us</td>
+                    </tr>
+                    <tr>
+                        <td>1000</td>
+                        <td>128</td>
+                        <td>1.266ms</td>
+                        <td>4.039ms</td>
+                        <td>4.138ms</td>
+                    </tr>
+                </table>
+
+                <pre><code>
+# Sample Python Code
+def greet(name):
+    return f"Hello, {name}!"
+print(greet("World"))
+                </code></pre>
             </section>
             <section>
-                <h3>Conclusion</h3>
+                <h3>So... Does it scale?</h3>
+                <p></p>
+            </section>
+            <section>
+                <h3>Acknowledgements</h3>
                 <p>
-                    Sed malesuada, ipsum id sollicitudin dignissim, lorem augue
-                    facilisis enim, sed pharetra turpis libero nec sapien.
-                    Nullam convallis lectus id augue mollis, ac pellentesque
-                    eros bibendum.
+                    I would like to greatly thank
+                    <a href="https://www.emilywenger.com/"
+                        >Professor Emily Wenger</a
+                    >
+                    for advising me through this research project and believing
+                    in me while I struggled to learn CUDA.
                 </p>
             </section>
         </main>
