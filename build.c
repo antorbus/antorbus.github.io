@@ -20,7 +20,7 @@ static const char *parts[] = {
     "        <li><a href=\"#hummingbird\">Faster Attention</a></li>\n"\
     "        <li><a href=\"#fpgaraycaster\">FPGA Raycaster</a></li>\n"\
     "        <li><a href=\"#renderfellow\">Rasterizer</a></li>\n"\
-    "        <li><a href=\"#other_projects\">Other Project</a></li>\n"\
+    "        <li><a href=\"#other_projects\">Other Projects</a></li>\n"\
 
 static const size_t nparts = sizeof(parts) / sizeof(parts[0]);
 
