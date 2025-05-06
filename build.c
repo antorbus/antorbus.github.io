@@ -41,7 +41,7 @@ int main(void) {
         "  <link rel=\"icon\" type=\"image/png\" sizes=\"32x32\" href=\"favicon-32x32.png\">\n"
         "  <link rel=\"icon\" type=\"image/png\" sizes=\"16x16\" href=\"favicon-16x16.png\">\n"
         "  <link rel=\"stylesheet\" href=\"styles.css\">\n"
-        "  <title>My Single-Page Site</title>\n"
+        "  <title>Andres' blog</title>\n"
         "</head>\n"
         "<body>\n"
         #if SHOW_BANNER 
