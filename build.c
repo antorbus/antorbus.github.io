@@ -9,7 +9,7 @@ static const char *parts[] = {
     // "fragments/predictions.html",
     "fragments/hummingbird.html",
     "fragments/fpgaraycaster.html",
-    // "fragments/renderfellow.html",
+    "fragments/renderfellow.html",
     "fragments/other_projects.html"
 };
 
