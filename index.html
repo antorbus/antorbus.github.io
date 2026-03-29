@@ -7,313 +7,66 @@
   <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
   <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
   <link rel="stylesheet" href="styles.css">
-  <title>Andres' blog</title>
+  <title>Andres Torrubia</title>
 </head>
 <body>
-  <header>
-    <h1>Andres' Funky Blog</h1>
-  </header>
-  <div class="layout">
-    <aside>
-      <ul>
-        <li><a href="">whoami</a></li>
-        <li><a href="#riscy_thoughts">RISC-Y Thoughts</a></li>
-        <li><a href="#predictions">Predictions</a></li>
-        <li><a href="#hummingbird">Faster Attention</a></li>
-        <li><a href="#fpgaraycaster">FPGA Raycaster</a></li>
-        <li><a href="#renderfellow">Rasterizer</a></li>
-        <li><a href="#other_projects">Other Projects</a></li>
-      </ul>
-    </aside>
-    <main>
-<section id="whoami">
+  <main>
     <img
-        src="images/fish.jpg"
-        alt="Mediterranean."
-        class="profile-pic"
+      src="images/profile.jpg"
+      alt="Andres Torrubia"
+      class="profile-pic"
     />
-  <p>
-      Hi, I am Andres Torrubia. I am currently a junior
-      studying at Duke from Spain. I am a triple major in ECE, CS
-      and Math. This summer I will be interning at <a
-      href="https://atomicsemi.com/"
-      target="_blank"
-      class="simple-link"
-      >Atomic Semi</a
-    >. I have interned twice at
-      <a
-          href="https://www.freepik.com/"
-          target="_blank"
-          class="simple-link"
-          >Freepik</a
-      >
-      working on recommender systems and image generation.
-      Apart from problem solving, I enjoy cooking, going to the
-      gym, reading, gardening and the wonderful mediterranean sea.
-      Here is my <a
-          href="other/cv.pdf"
-          target="_blank"
-          class="simple-link"
-          >CV</a
-      >.
-      Feel free to reach out to me at:
-      <a
-          href="mailto:andres.torrubiabustos@duke.edu"
-          class="email-link"
-      >
-          <span class="highlight"
-              >andres.torrubiabustos@duke.edu</span
-          >
-      </a> or connect with me on:
-      <a
-          href="https://github.com/antorbus"
-          target="_blank"
-          class="simple-link"
-          >GitHub</a
-      >
-      |
-      <a
-          href="https://www.linkedin.com/in/andres-torrubia-bustos-7125a7238/"
-          target="_blank"
-          class="simple-link"
-          >LinkedIn</a
-      >.
-  </p>
-</section>
-  
-<section id="hummingbird">
-    <h2>HummingBird: A Fast IO Aware Attention Kernel For Small
-        Sequences (12/30/24)</h2>
-        <p>
-            tl;dr I made an attention kernel optimized for a small
-            number of tokens that runs almost thrice as fast (wall clock
-            time) as flash attention on a 4090
-        </p>
-    <section>
-        <h3>Results</h3>
-        <ul>
-            <li>
-                There are two kernels which I have made: one for
-                sequences of <= 32 tokens with a head dimension of 64,
-                and one for <= 48 tokens with a head dimenision of 32.
-                Both kernels are made for float16 precision.
-            </li>
-            <br />
-            <li>
-                The 32 token kernel runs in 790μs for a batch size of
-                1000 and a model dimension of 5120 = 64 * 80 (head_dim *
-                num_heads). Flash attention takes 2.26ms. This is almost
-                a 3x speed-up on wall clock (CUDA) time.
-            </li>
-            <br />
-            <li>
-                The 48 token kernel runs in 710μs for the same batch
-                size and model dimension. Flash attention takes 1.44ms.
-                This is slightly over a 2x speed up.
-            </li>
-            <br />
-            <li>
-                These speed ups, both in model dimension and batch size,
-                scale up to any size (HBM permitting) for those number
-                of tokens and head dimension, NOT for other sizes.
-            </li>
-        </ul>
-    </section>
-    <section>
-        <h3>First iterations</h3>
-        <p>
-            Before beginning sophomore fall semester, I had spent the
-            majority of August evenings thinking about how to reduce the
-            time complexity of the attention mechanism. I had started to
-            think about methods of computing attention through cascading
-            layers (basically a two-step sliding window attention).
-        </p>
-        <p>
-            Results looked promising. My models were training and the
-            losses were going down. However, I was gluing my
-            modifications on top of torch's scaled_dot_product_attention
-            so I wasn't getting the desired performance increase.
-            Therefore, I decided to take a quick (2 month) detour to
-            learn CUDA.
-        </p>
-        <p>
-            I decided that I my first kernel would implement variable
-            sliding window attention. I spent a weekend on that, and
-            once it was done, I benchmarked it and, to my surpise, it
-            was faster than I expected! I made the sliding window as big
-            as the number of tokens (equivalent to vanilla attention),
-            and astonishingly it was also faster than flash attention.
-        </p>
-        <p>
-            Of course, this was a fallacy. I was benchmarking the kernel
-            launch time (CPU + CUDA time) instead of pure CUDA time. To
-            the surpise of no one, my triple for loop matrix
-            multiplication was actually 100x slower...
-        </p>
-        <p>
-            But I persisted! I had already told my advisor that I was
-            pivoting my research to making CUDA kernels so I had to
-            deliver. Two hectic months of classes passed and finally I
-            had real results. Below is an explanation of how it works.
-        </p>
-        <h3>Technical Details</h3>
-        <p>
-            First of all, how to we make programs run faster? One way is
-            by recuding the memory bottleneck. This is done in two ways:
-            through kernel fusion and by keeping as many of the
-            intermediate computations in shared memory. Therefore, the
-            most important consideration of my implementation was the
-            architecture I was dealing with, as this would determine the
-            maximum size of the matrices that I could keep in shared
-            memory.
-        </p>
-        <p>
-            4090s have 128 KB of shared memory per streaming
-            multiprocessor (sort of like CPU cores in the sense that
-            they have hardware threads and there are many of them). Some
-            of this memory is usually used as an L1 cache but we can
-            tell the GPU that we wish to use all of it using
-            <code>cudaFuncAttributePreferredSharedMemoryCarveout</code>.
-            Now we have the full 128 KB per SM to ourselves, which we
-            run 4 blocks on, leaving us with 32 KB per block.
-        </p>
-        <p>
-            Below are the results for the time taken on 32 tokens with a
-            head dimension of 64 on a 4090 using
-            <code>torch.profiler.ProfilerActivity</code>. The results
-            for 48 tokens and a head dimension of 48 follow a similar
-            pattern.
-        </p>
-        <table>
-            <tr>
-                <td>batch_size</td>
-                <td>num_heads</td>
-                <td>hummingbird</td>
-                <td>torch</td>
-                <td>flash_attn</td>
-            </tr>
-            <tr>
-                <td>1</td>
-                <td>1</td>
-                <td>2.720us</td>
-                <td>7.169us</td>
-                <td>6.624us</td>
-            </tr>
-            <tr>
-                <td>1</td>
-                <td>32</td>
-                <td>2.688us</td>
-                <td>7.072us</td>
-                <td>6.784us</td>
-            </tr>
-            <tr>
-                <td>1</td>
-                <td>128</td>
-                <td>3.168us</td>
-                <td>7.744us</td>
-                <td>7.232us</td>
-            </tr>
-            <tr>
-                <td>10</td>
-                <td>128</td>
-                <td>14.624us</td>
-                <td>43.040us</td>
-                <td>38.720us</td>
-            </tr>
-            <tr>
-                <td>100</td>
-                <td>128</td>
-                <td>130.271us</td>
-                <td>408.545us</td>
-                <td>377.185us</td>
-            </tr>
-            <tr>
-                <td>1000</td>
-                <td>128</td>
-                <td>1.266ms</td>
-                <td>4.039ms</td>
-                <td>4.138ms</td>
-            </tr>
-        </table>
-
-        <pre><code>
-        # Sample Python Code
-        def greet(name):
-        return f"Hello, {name}!"
-        print(greet("World"))
-        </code></pre>
-    </section>
-    <section>
-        <h3>So... Does it scale?</h3>
-        <p></p>
-    </section>
-    <section>
-        <h3>Acknowledgements</h3>
-        <p>
-            I would like to greatly thank
-            <a href="https://www.emilywenger.com/"
-                target="_blank"
-                class="simple-link"
-                >Professor Emily Wenger</a
-            >
-            for advising me through this research project and believing
-            in me while I struggled to learn CUDA.
-        </p>
-    </section>
-  </section>
-    
-<section id="fpgaraycaster">
-    <h2>FPGA Raycaster</h2>
+    <h1>Welcome to the Future Future</h1>
     <p>
-       
+      Hi, I'm Andres Torrubia, and I'm currently a junior studying at
+      Duke from the Mediterranean, Spain. I'm a triple major in ECE, CS,
+      and Math, and I also study physics in my spare time.
     </p>
-  </section>
-    
-<section id="renderfellow">
-    <h2>Renderfellow, Or How To Make A Simple Rasterizer</h2>
     <p>
-       
+      I am currently developing and researching what I believe is the
+      future of electromagnetism with my friend Conrad Qu, advised by
+      <a href="https://ee.duke.edu/profile/david-r-smith" target="_blank">David R. Smith</a>.
     </p>
-  </section>
-<section id="other_projects">
-    <h2>Other Stuff</h2>
-    <li>
-        <a
-            href="https://github.com/antorbus/lightlemur"
-            target="_blank"
-            class="simple-link"
-            >LightLemur</a
-        >
-    </li>
-    <br />
-    <li>
-        <a
-            href="https://www.kaggle.com/competitions/AI4Code/discussion/368729"
-            class="simple-link"
-            >A High Schooler's Solo Journey To A Kaggle
-            Silver Medal (Google AI4Code, 2022)</a
-        >
-    </li>
-    <br />
-    <li>
-        <a
-            href="https://github.com/antorbus/GoAI2023NEA"
-            class="simple-link"
-            >My Go At A Go Engine With Some Deep Learning
-            (2023)</a
-        >
-    </li>
-    <br />
-    <li>
-        <a
-            href="https://github.com/antorbus/orbitalguard"
-            class="simple-link"
-            >Missile Command Remake (2024)</a
-        >
-    </li>
-  </section>
-    </main>
-  </div>
-  <footer>&copy; 2025 Andres Torrubia. All rights reserved.</footer>
+    <p>
+      This summer I will be joining
+      <a href="https://atomicsemi.com/" target="_blank">Atomic Semi</a>
+      to work on scatterometry, building off my work from last summer
+      where I developed their ellipsometry software and mathematics,
+      making it several orders of magnitude faster.
+    </p>
+    <p>
+      My journey started at the age of 16 (2020) with a nanodegree
+      in deep learning. From there, I earned a
+      silver medal in a
+      <a href="https://www.kaggle.com/competitions/AI4Code/discussion/368729" target="_blank">Kaggle competition</a>.
+      I interned twice at
+      <a href="https://www.freepik.com/" target="_blank">Freepik</a>,
+      working on recommender systems and image generation. I built my own
+      <a href="https://github.com/antorbus/GoAI2023NEA" target="_blank">AlphaGo clone</a>
+      using deep learning.
+    </p>
+    <p>
+      Then in college, I made a
+      <a href="https://github.com/antorbus/renderfellow" target="_blank">rasterizer in C 
+      from scratch</a>, an <a href="https://github.com/antorbus/fpgaraycaster" target="_blank">FPGA 
+      ray caster running on my own CPU</a>, <a href="https://github.com/antorbus/lightlemur" target="_blank">a 
+      tensor differentiation library built from scratch in C</a>, and
+      <a href="https://github.com/antorbus/hummingbird" target="_blank">
+      an attention kernel that runs almost 3x faster than flash attention
+      for small sequence lengths</a>. Then vibe coding came along which made me 100x more prolific 
+      so I decided I wanted to study electrical
+      engineering since coding was solved. I learned PCB and CAD design. 
+      I developed an AM radio and a 110 W power supply featuring active
+      PFC and an LLC resonant DC to DC converter. This year I also started the
+      Duke Hacker Fab, where I am building a lithography stepping machine.
+    </p>
+    <p>
+      Feel free to reach out to me at
+      <a href="mailto:andres.torrubiabustos@duke.edu">andres.torrubiabustos@duke.edu</a>
+      or connect with me on
+      <a href="https://github.com/antorbus" target="_blank">GitHub</a> |
+      <a href="https://www.linkedin.com/in/andres-torrubia-bustos-7125a7238/" target="_blank">LinkedIn</a>.
+    </p>
+  </main>
 </body>
 </html>
